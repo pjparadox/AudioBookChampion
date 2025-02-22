@@ -1,0 +1,11 @@
+pydub
+PyQt5
+numpy
+scipy
+librosa
+soundfile
+noisereduce
+torch
+openai-whisper
+tqdm
+PyPDF2
