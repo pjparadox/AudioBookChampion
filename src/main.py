@@ -3,6 +3,17 @@ import argparse
 
 # Base mode functions are imported only if needed.
 def process_folder_base(input_folder, ebook, output_folder):
+    """
+    Process all audio files in a folder using the base separation mode (Narrator vs Dialogue).
+
+    Args:
+        input_folder (str): Path to the folder containing input audio files.
+        ebook (str): Path to the ebook file for alignment.
+        output_folder (str): Path to the folder where output will be saved.
+
+    Returns:
+        None
+    """
     from audio_bchampion.forced_alignment import transcribe_audio, load_ebook_text, get_dialogue_segments
     for file in os.listdir(input_folder):
         if file.lower().endswith(('.mp3', '.wav', '.flac', '.aac', '.ogg')):
@@ -26,6 +37,19 @@ def process_folder_base(input_folder, ebook, output_folder):
 
 # Alternate mode functions: Import alternate functions only.
 def process_folder_alternate(input_folder, ebook, output_folder):
+    """
+    Process all audio files in a folder using the alternate mode (Speaker Separation).
+
+    This mode attempts to identify individual speakers for each dialogue segment.
+
+    Args:
+        input_folder (str): Path to the folder containing input audio files.
+        ebook (str): Path to the ebook file for alignment.
+        output_folder (str): Path to the folder where output will be saved.
+
+    Returns:
+        None
+    """
     from audio_bchampion.forced_alignment import process_transcription_alternate, process_audiobook_alternate
     for file in os.listdir(input_folder):
         if file.lower().endswith(('.mp3', '.wav', '.flac', '.aac', '.ogg')):
@@ -37,7 +61,7 @@ def process_folder_alternate(input_folder, ebook, output_folder):
             print("Speaker intervals:", speaker_dict)
             print("Narration intervals:", narration_intervals)
             process_audiobook_alternate(
-                audio_path, 
+                audio_path,
                 {sp: [(s, e, txt) for (s, e, txt) in intervals] for sp, intervals in speaker_dict.items()},
                 narration_intervals,
                 out_dir
