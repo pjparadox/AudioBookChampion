@@ -57,13 +57,14 @@ def process_folder_alternate(input_folder, ebook, output_folder):
             out_dir = os.path.join(output_folder, os.path.splitext(file)[0])
             os.makedirs(out_dir, exist_ok=True)
             print(f"Processing (alternate mode): {audio_path}")
-            speaker_dict, narration_intervals, duration = process_transcription_alternate(audio_path, ebook_file=ebook)
-            print("Speaker intervals:", speaker_dict)
-            print("Narration intervals:", narration_intervals)
+            dialogue_subtitles, narration_subtitles, duration, speaker_assignments = process_transcription_alternate(audio_path, ebook_file=ebook)
+            print("Dialogue subtitles:", dialogue_subtitles)
+            print("Narration intervals:", narration_subtitles)
             process_audiobook_alternate(
                 audio_path,
-                {sp: [(s, e, txt) for (s, e, txt) in intervals] for sp, intervals in speaker_dict.items()},
-                narration_intervals,
+                dialogue_subtitles,
+                narration_subtitles,
+                speaker_assignments,
                 out_dir
             )
 
