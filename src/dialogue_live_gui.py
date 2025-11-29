@@ -47,6 +47,12 @@ GLOBAL_ASSIGNMENTS_FILE = os.path.join(DEFAULT_OUTPUT_DIR, "global_speaker_assig
 SIMILARITY_THRESHOLD = 0.75  # for matching dialogue segments
 
 def load_global_assignments():
+    """
+    Load the global speaker assignment cache from a JSON file.
+
+    Returns:
+        dict: A dictionary of dialogue patterns to speaker assignments.
+    """
     if os.path.exists(GLOBAL_ASSIGNMENTS_FILE):
         try:
             with open(GLOBAL_ASSIGNMENTS_FILE, "r", encoding="utf-8") as f:
@@ -56,6 +62,12 @@ def load_global_assignments():
     return {}
 
 def save_global_assignments(assignments):
+    """
+    Save the global speaker assignment cache to a JSON file.
+
+    Args:
+        assignments (dict): The dictionary of dialogue patterns to speaker assignments.
+    """
     try:
         os.makedirs(DEFAULT_OUTPUT_DIR, exist_ok=True)
         with open(GLOBAL_ASSIGNMENTS_FILE, "w", encoding="utf-8") as f:
@@ -64,6 +76,18 @@ def save_global_assignments(assignments):
         print("Error saving global assignments:", e)
 
 def apply_global_assignments(state_data, global_assignments):
+    """
+    Apply cached global speaker assignments to the current session's state data.
+
+    Matches dialogue text against the global cache using string similarity.
+
+    Args:
+        state_data (dict): The current processing state including dialogue subtitles.
+        global_assignments (dict): The global cache of assignments.
+
+    Returns:
+        dict: The updated state data with applied speaker assignments.
+    """
     if "dialogue_subtitles" not in state_data or "speaker_assignments" not in state_data:
         return state_data
     for idx, seg in enumerate(state_data["dialogue_subtitles"]):
@@ -80,7 +104,17 @@ def apply_global_assignments(state_data, global_assignments):
     return state_data
 
 class SplitDialogueDialog(QtWidgets.QDialog):
+    """
+    A modal dialog for splitting a dialogue line into two segments.
+    """
     def __init__(self, dialogue_text, parent=None):
+        """
+        Initialize the SplitDialogueDialog.
+
+        Args:
+            dialogue_text (str): The text of the dialogue line to split.
+            parent (QWidget, optional): The parent widget.
+        """
         super().__init__(parent)
         self.setWindowTitle("Split Dialogue Line")
         self.resize(600, 400)
@@ -97,10 +131,33 @@ class SplitDialogueDialog(QtWidgets.QDialog):
         btn_layout.addWidget(cancel_btn)
         layout.addLayout(btn_layout)
     def get_split_index(self):
+        """
+        Get the cursor position where the split should occur.
+
+        Returns:
+            int: The character index of the split.
+        """
         return self.text_edit.textCursor().position()
 
 class DialogueLiveGUI(QtWidgets.QWidget):
+    """
+    The main widget for the Live Dialogue Editor GUI.
+
+    Allows users to:
+    - View dialogue segments in a table.
+    - Reassign speakers.
+    - Split dialogue segments.
+    - View and search the ebook text context.
+    - Export the final audio tracks.
+    """
     def __init__(self, state_file, ebook_file):
+        """
+        Initialize the GUI with the state and ebook files.
+
+        Args:
+            state_file (str): Path to the JSON state file.
+            ebook_file (str): Path to the ebook file.
+        """
         super().__init__()
         self.state_file = state_file
         self.ebook_file = ebook_file
@@ -113,6 +170,7 @@ class DialogueLiveGUI(QtWidgets.QWidget):
         self.init_ui()
 
     def init_ui(self):
+        """Set up the UI layout and widgets."""
         self.setWindowTitle("Dialogue Live GUI – Review & Adjust Speaker Attributions")
         self.resize(1200, 700)
         splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal, self)
@@ -183,26 +241,31 @@ class DialogueLiveGUI(QtWidgets.QWidget):
         self.populate_table()
 
     def zoom_in(self):
+        """Increase the font size of the ebook display."""
         self.current_font_size += 2
         font = self.ebook_display.font()
         font.setPointSize(self.current_font_size)
         self.ebook_display.setFont(font)
 
     def zoom_out(self):
+        """Decrease the font size of the ebook display."""
         self.current_font_size = max(6, self.current_font_size - 2)
         font = self.ebook_display.font()
         font.setPointSize(self.current_font_size)
         self.ebook_display.setFont(font)
 
     def zoom_table_in(self):
+        """Increase the font size of the dialogue table."""
         self.table_font_size += 2
         self.update_table_font()
 
     def zoom_table_out(self):
+        """Decrease the font size of the dialogue table."""
         self.table_font_size = max(6, self.table_font_size - 2)
         self.update_table_font()
 
     def update_table_font(self):
+        """Apply the current table font size to all items in the table."""
         font = QtGui.QFont()
         font.setPointSize(self.table_font_size)
         self.table.setFont(font)
@@ -221,6 +284,7 @@ class DialogueLiveGUI(QtWidgets.QWidget):
         self.table.resizeRowsToContents()
 
     def load_state(self):
+        """Load the processing state from the JSON file."""
         try:
             with open(self.state_file, "r", encoding="utf-8") as f:
                 self.state_data = json.load(f)
@@ -240,6 +304,7 @@ class DialogueLiveGUI(QtWidgets.QWidget):
                 self.ebook_display.setPlainText(f"Error loading ebook: {e}")
 
     def populate_table(self):
+        """Populate the dialogue table with data from the loaded state."""
         if not self.state_data or "dialogue_subtitles" not in self.state_data or "speaker_assignments" not in self.state_data:
             QtWidgets.QMessageBox.critical(self, "Invalid State", "The state file does not contain required keys.")
             return
@@ -279,6 +344,7 @@ class DialogueLiveGUI(QtWidgets.QWidget):
         self.table.resizeRowsToContents()
 
     def update_context_display(self):
+        """Highlight the corresponding text in the ebook display when a table row is selected."""
         selected_rows = self.table.selectionModel().selectedRows()
         row = selected_rows[0].row() if selected_rows else self.table.currentRow()
         if row is not None and row >= 0:
@@ -313,6 +379,7 @@ class DialogueLiveGUI(QtWidgets.QWidget):
             self.ebook_display.setExtraSelections([])
 
     def search_in_ebook(self):
+        """Search for the selected dialogue text within the ebook display."""
         selected_rows = self.table.selectionModel().selectedRows()
         row = selected_rows[0].row() if selected_rows else self.table.currentRow()
         if row is None or row < 0:
@@ -347,6 +414,7 @@ class DialogueLiveGUI(QtWidgets.QWidget):
             QtWidgets.QMessageBox.information(self, "Not Found", "No close match found in the ebook.")
 
     def split_selected_line(self):
+        """Open the split dialog to divide the selected dialogue line."""
         selected_rows = self.table.selectionModel().selectedRows()
         row = selected_rows[0].row() if selected_rows else self.table.currentRow()
         if row is None or row < 0:
@@ -391,6 +459,7 @@ class DialogueLiveGUI(QtWidgets.QWidget):
         self.save_state()  # Auto-save after splitting.
 
     def save_state(self):
+        """Save the current state (assignments, ebook text) to the JSON file."""
         if not self.state_data or not self.state_file:
             return
         try:
@@ -441,6 +510,7 @@ class DialogueLiveGUI(QtWidgets.QWidget):
             QtWidgets.QMessageBox.critical(self, "Error Saving State", str(e))
 
     def export_audio_tracks(self):
+        """Export the final audio tracks based on current assignments."""
         self.save_state()
         if not self.audiobook_file:
             file_path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Select Audiobook File", "", "Audio Files (*.mp3 *.wav *.m4a)")
@@ -462,6 +532,7 @@ class DialogueLiveGUI(QtWidgets.QWidget):
             QtWidgets.QMessageBox.critical(self, "Export Error", str(e))
 
 def main():
+    """Main entry point for the Dialogue Live GUI."""
     parser = argparse.ArgumentParser(description="Resume Dialogue Live GUI for speaker reassignment")
     parser.add_argument("--state", required=True, help="Path to the processing state JSON file")
     parser.add_argument("--ebook", required=True, help="Path to the ebook file (DOCX, PDF, or TXT)")

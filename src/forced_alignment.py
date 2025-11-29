@@ -33,16 +33,53 @@ SHOW_DEBUG = False
 # Helper Functions
 # ---------------------------
 def remove_ansi_escape(text):
+    """
+    Remove ANSI escape sequences from a string.
+
+    Args:
+        text (str): The text containing ANSI codes.
+
+    Returns:
+        str: The cleaned text.
+    """
     ansi_escape = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]')
     return ansi_escape.sub('', text)
 
 def remove_think_tags(text):
+    """
+    Remove <think>...</think> tags and their content from the text.
+    These tags are often produced by reasoning models.
+
+    Args:
+        text (str): The text containing think tags.
+
+    Returns:
+        str: The text with think tags removed.
+    """
     return re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
 
 def sanitize_speaker_name(name):
+    """
+    Sanitize a speaker name by removing non-alphanumeric characters (except underscores).
+
+    Args:
+        name (str): The raw speaker name.
+
+    Returns:
+        str: The sanitized speaker name.
+    """
     return re.sub(r'[^A-Za-z0-9_]', '', name)
 
 def format_timestamp(seconds):
+    """
+    Format seconds into an SRT timestamp string (HH:MM:SS,mmm).
+
+    Args:
+        seconds (float): The time in seconds.
+
+    Returns:
+        str: The formatted timestamp string.
+    """
     millis = int((seconds - int(seconds)) * 1000)
     s = int(seconds)
     hrs = s // 3600
@@ -51,6 +88,16 @@ def format_timestamp(seconds):
     return f"{hrs:02}:{mins:02}:{secs:02},{millis:03}"
 
 def export_srt(subtitles, srt_path):
+    """
+    Export subtitles to an SRT file.
+
+    Args:
+        subtitles (list of tuple): A list of (start_time, end_time, text) tuples.
+        srt_path (str): The file path to save the SRT file.
+
+    Returns:
+        None
+    """
     with open(srt_path, "w", encoding="utf-8") as f:
         for idx, (start, end, text) in enumerate(subtitles, 1):
             f.write(f"{idx}\n")
@@ -62,11 +109,33 @@ def export_srt(subtitles, srt_path):
 # Transcription Using Whisper
 # ---------------------------
 def transcribe_audio(audio_file):
+    """
+    Transcribe an audio file using OpenAI's Whisper model.
+
+    Loads the 'base' model on CUDA if available, otherwise CPU.
+
+    Args:
+        audio_file (str): Path to the audio file.
+
+    Returns:
+        dict: The transcription result containing 'segments' and other metadata.
+    """
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = whisper.load_model("base", device=device)
     return model.transcribe(audio_file)
 
 def merge_transcription(result):
+    """
+    Merge transcription segments into a single text block and a list of boundaries.
+
+    Args:
+        result (dict): The result dictionary from `transcribe_audio`.
+
+    Returns:
+        tuple:
+            - full_text (str): The concatenated transcription text.
+            - boundaries (list of tuple): List of (start, end, text) for each segment.
+    """
     full_text = ""
     boundaries = []
     for seg in result.get("segments", []):
@@ -78,6 +147,15 @@ def merge_transcription(result):
 # Ebook Loading and Title Extraction
 # ---------------------------
 def load_ebook_text(ebook_file):
+    """
+    Load text from an ebook file (.docx, .pdf, or plain text).
+
+    Args:
+        ebook_file (str): Path to the ebook file.
+
+    Returns:
+        str: The extracted text from the ebook.
+    """
     ebook_text = ""
     if ebook_file.lower().endswith('.docx'):
         try:
@@ -105,6 +183,15 @@ def load_ebook_text(ebook_file):
     return ebook_text
 
 def extract_book_title(ebook_text):
+    """
+    Attempt to extract the book title from the first non-empty line of the text.
+
+    Args:
+        ebook_text (str): The full text of the ebook.
+
+    Returns:
+        str: The extracted title, or an empty string if not found.
+    """
     for line in ebook_text.splitlines():
         line = line.strip()
         if line:
@@ -112,11 +199,34 @@ def extract_book_title(ebook_text):
     return ""
 
 def align_transcript_to_ebook(full_transcript, ebook_text):
+    """
+    Compute alignment similarity between the transcript and the ebook text.
+
+    Args:
+        full_transcript (str): The full audio transcription.
+        ebook_text (str): The full ebook text.
+
+    Returns:
+        str: The ebook text (currently just returns it, but calculates ratio for logging).
+    """
     ratio = difflib.SequenceMatcher(None, full_transcript, ebook_text).ratio()
     print(f"Global alignment similarity: {ratio:.2f}")
     return ebook_text
 
 def determine_local_ebook_range(full_transcript, ebook_text):
+    """
+    Determine the subset of the ebook text that corresponds to the given transcript.
+
+    This attempts to find the start and end of the transcript within the ebook
+    to avoid searching the entire book for every dialogue line.
+
+    Args:
+        full_transcript (str): The full audio transcription.
+        ebook_text (str): The full ebook text.
+
+    Returns:
+        str: A substring of the ebook text that roughly matches the transcript coverage.
+    """
     header = full_transcript[:300].strip()
     footer = full_transcript[-300:].strip()
     start_idx = ebook_text.lower().find(header.lower())
@@ -140,6 +250,20 @@ def determine_local_ebook_range(full_transcript, ebook_text):
 # Dialogue Extraction from Ebook Text
 # ---------------------------
 def extract_dialogue_intervals(ebook_text, audio_boundaries, gap_threshold=10):
+    """
+    Extract dialogue intervals by mapping quoted text in the ebook to audio time boundaries.
+
+    It finds all quoted text in the ebook, groups adjacent quotes, and then maps these groups
+    to the audio timeline based on character position ratios.
+
+    Args:
+        ebook_text (str): The ebook text.
+        audio_boundaries (list of tuple): List of (start, end, text) from the audio transcription.
+        gap_threshold (int): Max characters between quotes to consider them part of the same group.
+
+    Returns:
+        list of tuple: A list of (start_time, end_time, dialogue_text) for each dialogue segment.
+    """
     dialogue_matches = list(re.finditer(r'[“"](.+?)[”"]', ebook_text, re.DOTALL))
     grouped_matches = []
     if dialogue_matches:
@@ -174,6 +298,16 @@ def extract_dialogue_intervals(ebook_text, audio_boundaries, gap_threshold=10):
     return dialogue_subtitles
 
 def extract_narration_intervals(boundaries, dialogue_subtitles):
+    """
+    Identify narration intervals by checking audio boundaries against dialogue intervals.
+
+    Args:
+        boundaries (list of tuple): List of (start, end, text) from audio transcription.
+        dialogue_subtitles (list of tuple): List of (start, end, text) identified as dialogue.
+
+    Returns:
+        list of tuple: A list of (start, end, text) that are considered narration.
+    """
     narration_subtitles = []
     for b in boundaries:
         b_start, b_end, b_text = b
@@ -204,6 +338,15 @@ known_characters = {
 # Processing Version Selection Prompt
 # ---------------------------
 def select_processing_version():
+    """
+    Prompt the user via CLI to select a processing version (A or B).
+
+    Version A: Immediate Narration Assignment if no quotes.
+    Version B: Extended context window search before assigning Narration.
+
+    Returns:
+        str: "A" or "B".
+    """
     global SELECTED_PROCESSING_VERSION
     if SELECTED_PROCESSING_VERSION is not None:
         return SELECTED_PROCESSING_VERSION
@@ -225,6 +368,12 @@ def select_processing_version():
 # Ollama Model Selection
 # ---------------------------
 def select_ollama_model():
+    """
+    List available Ollama models and prompt the user to select one.
+
+    Returns:
+        str: The name of the selected model (e.g., "deepseek-r1:8b").
+    """
     global SELECTED_OLLAMA_MODEL
     if SELECTED_OLLAMA_MODEL is not None:
         return SELECTED_OLLAMA_MODEL
@@ -295,6 +444,18 @@ DEEPSEEK_PROMPT_BLOCK = (
 # Speaker Determination via DeepSeek (Block-Based)
 # ---------------------------
 def get_speakers_for_block(block, ebook_text, book_title, prev_speaker=None):
+    """
+    Determine speakers for a block of dialogue using an LLM (Ollama).
+
+    Args:
+        block (list): A list of dialogue segments.
+        ebook_text (str): The text of the ebook.
+        book_title (str): The title of the book.
+        prev_speaker (str, optional): The name of the previous speaker.
+
+    Returns:
+        dict: A dictionary mapping index strings ('1', '2', etc.) to speaker assignment strings (e.g., "George male").
+    """
     block_text = ""
     for i, (_, _, dialogue_text) in enumerate(block):
         block_text += f"{i+1}. {dialogue_text}\n"
@@ -363,6 +524,20 @@ def get_speakers_for_block(block, ebook_text, book_title, prev_speaker=None):
 # Speaker Determination via DeepSeek (Single Dialogue)
 # ---------------------------
 def get_speaker_for_dialogue(dialogue_text, ebook_text, seg_start, seg_end, prev_speaker=None, book_title=""):
+    """
+    Determine the speaker for a single dialogue line using an LLM.
+
+    Args:
+        dialogue_text (str): The dialogue text.
+        ebook_text (str): The ebook text (local context).
+        seg_start (float): Start time of segment (unused).
+        seg_end (float): End time of segment (unused).
+        prev_speaker (str, optional): The name of the previous speaker.
+        book_title (str, optional): The title of the book.
+
+    Returns:
+        str: The assigned speaker string (e.g., "George male").
+    """
     model_id = select_ollama_model()
     window_size = 200  # starting at 200 characters
     max_window = 7000
@@ -478,6 +653,16 @@ def get_speaker_for_dialogue(dialogue_text, ebook_text, seg_start, seg_end, prev
     return best_result
 
 def fallback_speaker(dialogue_text, prev_speaker):
+    """
+    Attempt to identify a speaker using simple keyword matching if the LLM fails.
+
+    Args:
+        dialogue_text (str): The dialogue text.
+        prev_speaker (str): The previous speaker.
+
+    Returns:
+        str: A guessed speaker string or "Unnamed1 unknown".
+    """
     found = []
     lower_text = dialogue_text.lower()
     for name, gender in known_characters.items():
@@ -492,6 +677,17 @@ def fallback_speaker(dialogue_text, prev_speaker):
     return "Unnamed1 unknown"
 
 def update_descriptive_assignments(speaker_assignments, dialogue_subtitles, threshold=0.6):
+    """
+    Propagate assignments from known speakers to "unnamed" ones if the text is similar.
+
+    Args:
+        speaker_assignments (dict): The current speaker assignment map.
+        dialogue_subtitles (list): The list of dialogue subtitles.
+        threshold (float): Similarity threshold for text matching.
+
+    Returns:
+        dict: The updated speaker assignments.
+    """
     for i in range(len(dialogue_subtitles)):
         current = speaker_assignments.get(str(i), "")
         if current.lower().startswith("unnamed"):
@@ -505,6 +701,15 @@ def update_descriptive_assignments(speaker_assignments, dialogue_subtitles, thre
     return speaker_assignments
 
 def merge_intervals(intervals):
+    """
+    Merge overlapping or adjacent time intervals.
+
+    Args:
+        intervals (list of tuple): List of (start, end) or (start, end, ...) tuples.
+
+    Returns:
+        list of tuple: Merged list of (start, end, ...) tuples.
+    """
     if not intervals:
         return []
     intervals = sorted(intervals, key=lambda x: x[0])
@@ -518,6 +723,16 @@ def merge_intervals(intervals):
     return merged
 
 def mute_segments(audio, intervals):
+    """
+    Mute specified intervals in an audio segment.
+
+    Args:
+        audio (AudioSegment): The audio segment.
+        intervals (list of tuple): List of (start, end) tuples.
+
+    Returns:
+        AudioSegment: The audio segment with muted intervals.
+    """
     output = audio
     for start, end in intervals:
         start_ms = int(start * 1000)
@@ -527,6 +742,16 @@ def mute_segments(audio, intervals):
     return output
 
 def export_srt(subtitles, srt_path):
+    """
+    Export subtitles to an SRT file.
+
+    Args:
+        subtitles (list of tuple): List of (start, end, text) tuples.
+        srt_path (str): The output file path.
+
+    Returns:
+        None
+    """
     with open(srt_path, "w", encoding="utf-8") as f:
         for idx, (start, end, text) in enumerate(subtitles, 1):
             f.write(f"{idx}\n")
@@ -538,6 +763,22 @@ def export_srt(subtitles, srt_path):
 # Global Processing & Output Generation
 # ---------------------------
 def process_transcription_alternate(audio_file, ebook_file):
+    """
+    Main orchestration function for processing an audiobook file.
+
+    It performs transcription, alignment, dialogue extraction, and speaker attribution.
+
+    Args:
+        audio_file (str): Path to the audio file.
+        ebook_file (str): Path to the ebook file.
+
+    Returns:
+        tuple:
+            - dialogue_subtitles (list)
+            - narration_subtitles (list)
+            - total_duration (float)
+            - speaker_assignments (dict)
+    """
     select_processing_version()
     result = transcribe_audio(audio_file)
     full_transcript, boundaries = merge_transcription(result)
@@ -592,11 +833,24 @@ def process_transcription_alternate(audio_file, ebook_file):
     return dialogue_subtitles, narration_subtitles, total_duration, speaker_assignments
 
 def process_audiobook_alternate(audio_file, dialogue_subtitles, narration_subtitles, speaker_assignments, output_dir):
+    """
+    Generate output audio files based on the processed subtitles and assignments.
+
+    Args:
+        audio_file (str): Path to the source audio file.
+        dialogue_subtitles (list): List of dialogue segments.
+        narration_subtitles (list): List of narration segments.
+        speaker_assignments (dict): Speaker assignment map.
+        output_dir (str): Directory to save output files.
+
+    Returns:
+        None
+    """
     print(f"Loading audiobook file: {audio_file}")
     audio = AudioSegment.from_file(audio_file)
     os.makedirs(output_dir, exist_ok=True)
     orig_name = os.path.basename(audio_file)
-    
+
     # Create narrator track by muting dialogue intervals.
     all_dialogue = merge_intervals([(s, e) for (s, e, _) in dialogue_subtitles])
     narrator_audio = mute_segments(audio, all_dialogue)
@@ -605,13 +859,13 @@ def process_audiobook_alternate(audio_file, dialogue_subtitles, narration_subtit
     print(f"Narrator track saved to: {narrator_path}")
     narrator_srt = os.path.join(output_dir, f"narrator_{os.path.splitext(orig_name)[0]}.srt")
     export_srt(narration_subtitles, narrator_srt)
-    
+
     # Create individual speaker tracks by muting non-dialogue parts.
     speaker_intervals = {}
     for idx, (s, e, txt) in enumerate(dialogue_subtitles):
         speaker = speaker_assignments.get(idx, "Unknown unknown")
         speaker_intervals.setdefault(speaker, []).append((s, e, txt))
-    
+
     for speaker, intervals in speaker_intervals.items():
         merged_int = merge_intervals([(s, e) for (s, e, _) in intervals])
         non_speaker = []
@@ -640,7 +894,7 @@ if __name__ == "__main__":
     parser.add_argument("--audiobook", required=True, help="Path to audiobook file")
     parser.add_argument("--ebook", required=True, help="Path to ebook file (DOCX or PDF)")
     args = parser.parse_args()
-    
+
     dialogue_subtitles, narration_subtitles, total_duration, speaker_assignments = process_transcription_alternate(args.audiobook, ebook_file=args.ebook)
     print("Dialogue Intervals:")
     for idx, (s, e, txt) in enumerate(dialogue_subtitles):
